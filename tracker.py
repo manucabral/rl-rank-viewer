@@ -112,7 +112,11 @@ class GameTracker:
 
     async def _listen(self) -> None:
         log.info("Connecting to RL Stats API (127.0.0.1:%d)…", self._port)
-        async with StatsClient(port=self._port, overflow="drop") as client:
+        async with StatsClient(
+            port=self._port,
+            overflow="drop",
+            connect_timeout=8.0,
+        ) as client:
             self._client = client
             client.on_match_created(self._on_create)
             client.on_update_state(self._on_update)
@@ -156,8 +160,6 @@ class GameTracker:
             return
 
         self._check_active(data)
-        if not self._match_active:
-            return
 
         player_list = self._extract(raw_players)
         if not self._update(player_list):
@@ -174,11 +176,14 @@ class GameTracker:
         for entry in raw_players:
             if not isinstance(entry, dict):
                 continue
+            pid = entry.get("PrimaryId", "?")
+            is_bot = not pid or pid == "Unknown"
             players.append(
                 {
                     "name": entry.get("Name", "?"),
-                    "id": entry.get("PrimaryId", "?"),
+                    "id": pid or "Unknown",
                     "team": entry.get("TeamNum", -1),
+                    "is_bot": is_bot,
                 }
             )
         return players
@@ -199,9 +204,20 @@ class GameTracker:
     def _log_players(self, players: list[dict]) -> None:
         log.info("Players in match (%d):", len(players))
         for player in players:
-            log.info("  [%s] %s (ID: %s)", team_name(player["team"]), player["name"], player["id"])
+            tag = " [BOT]" if player.get("is_bot") else ""
+            log.info(
+                "  [%s] %s (ID: %s)%s",
+                team_name(player["team"]),
+                player["name"],
+                player["id"],
+                tag,
+            )
 
     def _queue_players(self, players: list[dict]) -> None:
-        log.info("Enqueuing %d player(s) for rank fetch…", len(players))
-        for player in players:
+        real = [p for p in players if not p.get("is_bot")]
+        if not real:
+            log.info("All players are bots, skipping rank fetch")
+            return
+        log.info("Enqueuing %d player(s) for rank fetch…", len(real))
+        for player in real:
             self._rank_fetcher.enqueue(player["id"], player["name"])

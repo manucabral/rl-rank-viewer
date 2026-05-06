@@ -14,16 +14,16 @@ def setup_logger(level: int = logging.DEBUG) -> None:
     root.setLevel(level)
     root.handlers.clear()
     root.addHandler(handler)
-    _suppress_noisy_loggers()
+    _suppress_noisy_loggers(level)
 
 
-def _suppress_noisy_loggers() -> None:
+def _suppress_noisy_loggers(level: int) -> None:
     class _FilterMalformedConfig(logging.Filter):
         def filter(self, record):
             return "skipped malformed config line" not in record.getMessage()
 
     logging.getLogger("rlstatsapi.config").addFilter(_FilterMalformedConfig())
-    logging.getLogger("rlstatsapi").setLevel(logging.WARNING)
+    logging.getLogger("rlstatsapi").setLevel(level)
     logging.getLogger("asyncio").setLevel(logging.WARNING)
 
 
