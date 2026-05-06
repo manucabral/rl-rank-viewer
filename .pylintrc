@@ -1,0 +1,12 @@
+[MAIN]
+good-names=log
+
+[MESSAGES CONTROL]
+disable=
+    C0114,
+    C0115,
+    C0116,
+    C0209,
+    R0902,
+    R0903,
+    R0914
