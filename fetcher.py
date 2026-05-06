@@ -1,11 +1,12 @@
-"""Rank fetcher"""
+"""Rank fetcher."""
 
 import queue
 import threading
 import time
 from datetime import datetime, timezone
 
-from curl_cffi import requests
+import requests as req
+from curl_cffi import requests as cffi_req
 
 from config import (
     MMR_API_BASE_URL,
@@ -15,9 +16,12 @@ from config import (
     MMR_HTTP_TIMEOUT,
     MMR_IMPERSONATE_TARGET,
     MMR_NEGATIVE_CACHE_TTL,
+    MMR_OFFICIAL_API_URL,
     MMR_PLATFORM_MAP,
     MMR_PLAYLIST_IDS,
     MMR_STALE_TTL,
+    TRACKER_API_KEY,
+    USE_OFFICIAL_API,
 )
 from log_setup import get_logger
 from rank_utils import parse_division_number
@@ -81,7 +85,7 @@ def parse_mmr_response(data: dict) -> dict | None:
 
 
 class RankFetcher:
-    """Fetches and caches player ranks from tracker.gg API in a background thread."""
+    """Worker-threaded HTTP fetcher with TTL-based memory cache."""
 
     def __init__(self, ttl: int = MMR_CACHE_TTL):
         self._ttl = ttl
@@ -100,7 +104,7 @@ class RankFetcher:
             target=self._work, daemon=True, name="mmr-fetcher"
         )
         self._worker_thread.start()
-        log.info("Rank fetcher started")
+        log.info("Rank fetcher started (%s)", "api" if USE_OFFICIAL_API else "scrape")
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -120,7 +124,7 @@ class RankFetcher:
             age = self._age(entry)
             fresh_ttl = MMR_NEGATIVE_CACHE_TTL if entry.get("_negative") else self._ttl
             if age < fresh_ttl:
-                return entry  # no deepcopy, consumer is read-only
+                return entry
             if not entry.get("_negative") and age < MMR_STALE_TTL:
                 return entry
             return None
@@ -134,7 +138,7 @@ class RankFetcher:
             return self._age(entry) < ttl
 
     def enqueue(self, primary_id: str, display_name: str) -> None:
-        """Queue player for rank fetch."""
+        """Queue player for MMR fetch (skips if in-flight or fresh)."""
         key = f"{primary_id}|{display_name}"
         with self._inflight_lock:
             if key in self._inflight:
@@ -175,16 +179,24 @@ class RankFetcher:
         log.info("Rank fetcher worker stopped")
 
     def _fetch(self, key: str, plat: str, ident: str) -> None:
-        url = MMR_API_BASE_URL.format(plat=plat, ident=ident)
+        if USE_OFFICIAL_API:
+            url = MMR_OFFICIAL_API_URL.format(plat=plat, ident=ident)
+            headers = {"TRN-Api-Key": TRACKER_API_KEY}
+            client = req
+            kwargs: dict = {"headers": headers, "timeout": MMR_HTTP_TIMEOUT}
+        else:
+            url = MMR_API_BASE_URL.format(plat=plat, ident=ident)
+            kwargs = {
+                "headers": MMR_API_HEADERS,
+                "impersonate": MMR_IMPERSONATE_TARGET,  # type: ignore[arg-type]
+                "timeout": MMR_HTTP_TIMEOUT,
+            }
+            client = cffi_req
+
         log.info("GET %s", url)
         t0 = time.monotonic()
         try:
-            r = requests.get(
-                url,
-                headers=MMR_API_HEADERS,
-                impersonate=MMR_IMPERSONATE_TARGET,  # type: ignore[arg-type]
-                timeout=MMR_HTTP_TIMEOUT,
-            )
+            r = client.get(url, **kwargs)
         except Exception as exc:  # pylint: disable=broad-exception-caught
             log.warning("HTTP fetch failed for %s: %s", key, exc)
             return
@@ -240,9 +252,9 @@ class RankFetcher:
         parts = []
         for label in tuple(MMR_PLAYLIST_IDS.values()):
             pl = entry["playlists"].get(label)
-            parts.append(f'{label}={pl["mmr"] if pl else "???"}')
+            parts.append(f'{label}={pl["mmr"] if pl else "--"}')
         log.info(
-            "%s: MMR %s (best=%d - %s)",
+            "%s: MMR %s (best=%d @ %s)",
             key,
             " ".join(parts),
             best["mmr"],

@@ -34,6 +34,6 @@ def parse_division_number(div_name: str) -> int:
     return _ROMAN_TO_INT.get(div_name.split()[-1], 0)
 
 
-def team_name(team_num: int) -> str:    
+def team_name(team_num: int) -> str:
     """Team number to name."""
     return "BLUE" if team_num == 0 else "ORANGE" if team_num == 1 else "?"

@@ -4,6 +4,7 @@ import argparse
 import logging
 import sys
 
+from config import USE_OFFICIAL_API
 from log_setup import get_logger, setup_logger
 from tracker import GameTracker
 from overlay import WebViewApp
@@ -21,7 +22,7 @@ def main() -> None:
     args = _parse_args()
     setup_logger(logging.DEBUG if args.verbose else logging.INFO)
 
-    log.info("RankViewer starting…")
+    log.info("RankViewer starting… (%s)", "api" if USE_OFFICIAL_API else "scrape")
 
     tracker = GameTracker()
     overlay = WebViewApp(tracker)

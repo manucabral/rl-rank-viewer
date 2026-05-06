@@ -1,5 +1,11 @@
 """App config."""
 
+import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
 MMR_QUEUE_BACKPRESSURE: int = 20
 RL_STATS_PORT: int = 49123
 RL_PACKET_SEND_RATE: int = 1
@@ -9,10 +15,19 @@ MMR_STALE_TTL: int = 3600
 MMR_NEGATIVE_CACHE_TTL: int = 120
 MMR_FETCH_INTERVAL: float = 0.5
 MMR_HTTP_TIMEOUT: int = 15
+
+# Modo oficial (API key) vs scraping
+TRACKER_API_KEY: str | None = os.getenv("TRACKER_API_KEY")
+USE_OFFICIAL_API: bool = TRACKER_API_KEY is not None
+
 MMR_IMPERSONATE_TARGET: str = "chrome120"
 
 MMR_API_BASE_URL: str = (
-    "https://api.tracker.gg/api/v2/rocket-league/standard/profile/{platform}/{identifier}"
+    "https://api.tracker.gg/api/v2/rocket-league/standard/profile/{plat}/{ident}"
+)
+
+MMR_OFFICIAL_API_URL: str = (
+    "https://public-api.tracker.gg/v2/rocket-league/standard/profile/{plat}/{ident}"
 )
 
 MMR_API_HEADERS: dict[str, str] = {
