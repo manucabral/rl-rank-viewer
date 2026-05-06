@@ -2,6 +2,7 @@
 """RL stats tracker."""
 
 import asyncio
+import os
 import threading
 from collections.abc import Callable
 
@@ -73,7 +74,7 @@ class GameTracker:
     def _setup_api(self) -> None:
         status = get_stats_api_status()
         if status.enabled:
-            log.info("Stats API already enabled (%s)", status.path)
+            log.info("Stats API already enabled (%s)", os.path.basename(status.path))
             return
         if not status.found:
             searched = "; ".join(str(p) for p in candidate_stats_api_paths())
@@ -90,7 +91,10 @@ class GameTracker:
                 packet_send_rate=RL_PACKET_SEND_RATE,
                 path=status.path,
             )
-            log.info("Stats API configured (%s). Restart RL if running.", status.path)
+            log.info(
+                "Stats API configured (%s). Restart RL if running.",
+                os.path.basename(status.path),
+            )
         except (OSError, ValueError) as exc:
             log.warning("Could not configure Stats API: %s", exc)
 
@@ -160,7 +164,7 @@ class GameTracker:
             return
 
         self._log_players(player_list)
-        self._queue_all(player_list)
+        self._queue_players(player_list)
         if self.on_players_update:
             self.on_players_update(player_list)
 
@@ -194,10 +198,10 @@ class GameTracker:
 
     def _log_players(self, players: list[dict]) -> None:
         log.info("Players in match (%d):", len(players))
-        for p in players:
-            log.info("  [%s] %s (ID: %s)", team_name(p["team"]), p["name"], p["id"])
+        for player in players:
+            log.info("  [%s] %s (ID: %s)", team_name(player["team"]), player["name"], player["id"])
 
-    def _queue_all(self, players: list[dict]) -> None:
+    def _queue_players(self, players: list[dict]) -> None:
         log.info("Enqueuing %d player(s) for rank fetch…", len(players))
-        for p in players:
-            self._rank_fetcher.enqueue(p["id"], p["name"])
+        for player in players:
+            self._rank_fetcher.enqueue(player["id"], player["name"])

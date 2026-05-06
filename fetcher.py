@@ -45,16 +45,16 @@ def resolve_platform(primary_id: str, display_name: str) -> tuple[str, str] | No
 def parse_mmr_response(data: dict) -> dict | None:
     """Parse tracker.gg API response into playlists dict."""
     playlists: dict[str, dict] = {}
-    for seg in data.get("segments") or []:
-        if seg.get("type") != "playlist":
+    for segment in data.get("segments") or []:
+        if segment.get("type") != "playlist":
             continue
-        pid = (seg.get("attributes") or {}).get("playlistId")
-        if not isinstance(pid, int):
+        playlist_id = (segment.get("attributes") or {}).get("playlistId")
+        if not isinstance(playlist_id, int):
             continue
-        label = MMR_PLAYLIST_IDS.get(pid)
+        label = MMR_PLAYLIST_IDS.get(playlist_id)
         if not label:
             continue
-        stats = seg.get("stats") or {}
+        stats = segment.get("stats") or {}
         rating_val = stats.get("rating")
         rating = rating_val.get("value") if isinstance(rating_val, dict) else None
         if rating is None:
@@ -194,23 +194,23 @@ class RankFetcher:
             client = cffi_req
 
         log.info("GET %s", url)
-        t0 = time.monotonic()
+        start = time.monotonic()
         try:
-            r = client.get(url, **kwargs)
+            response = client.get(url, **kwargs)
         except Exception as exc:  # pylint: disable=broad-exception-caught
             log.warning("HTTP fetch failed for %s: %s", key, exc)
             return
         log.debug(
-            "  -> HTTP %d in %.0fms", r.status_code, (time.monotonic() - t0) * 1000
+            "  -> HTTP %d in %.0fms", response.status_code, (time.monotonic() - start) * 1000
         )
-        if r.status_code == 404:
+        if response.status_code == 404:
             self._cache_miss(key)
             return
-        if r.status_code != 200:
-            log.warning("HTTP %d for %s", r.status_code, key)
+        if response.status_code != 200:
+            log.warning("HTTP %d for %s", response.status_code, key)
             return
         try:
-            self._parse(key, r)
+            self._parse(key, response)
         except Exception:  # pylint: disable=broad-exception-caught
             log.exception("failed to process MMR response for %s", key)
 
@@ -251,8 +251,8 @@ class RankFetcher:
         best = entry["best"]
         parts = []
         for label in tuple(MMR_PLAYLIST_IDS.values()):
-            pl = entry["playlists"].get(label)
-            parts.append(f'{label}={pl["mmr"] if pl else "--"}')
+            playlist_data = entry["playlists"].get(label)
+            parts.append(f'{label}={playlist_data["mmr"] if playlist_data else "--"}')
         log.info(
             "%s: MMR %s (best=%d @ %s)",
             key,
